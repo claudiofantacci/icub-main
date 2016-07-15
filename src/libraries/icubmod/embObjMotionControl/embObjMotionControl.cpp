@@ -885,7 +885,7 @@ bool embObjMotionControl::parsePositionPidsGroup(Bottle& pidsGroup, Pid myPid[])
     return true;
 }
 
-bool embObjMotionControl::parseVelocityPidsGroup(Bottle& pidsGroup, Pid myPid[])
+bool embObjMotionControl::parseVelocityPidsGroup(Bottle& pidsGroup, Pid myPid[], int control_law)
 {
     int j=0;
     Bottle xtmp;
@@ -900,6 +900,8 @@ bool embObjMotionControl::parseVelocityPidsGroup(Bottle& pidsGroup, Pid myPid[])
     if (!extractGroup(pidsGroup, xtmp, "stictionDwn", "Pid stictionDwn", _njoints))   return false; for (j=0; j<_njoints; j++) myPid[j].stiction_down_val = xtmp.get(j+1).asDouble();
     if (!extractGroup(pidsGroup, xtmp, "kff", "Pid kff parameter", _njoints))         return false; for (j=0; j<_njoints; j++) myPid[j].kff = xtmp.get(j+1).asDouble();
 
+    for (j=0; j<_njoints; j++) myPid[j].control_law = control_law;
+    
     //conversion from metric to machine units (if applicable)
     if (_positionControlUnits==P_METRIC_UNITS)
     {
@@ -1438,9 +1440,22 @@ bool embObjMotionControl::fromConfig_Step2(yarp::os::Searchable &config)
            if (controlLaw.isNull() == false && controlLaw.isString() == true)
            {
                string s_controlaw = controlLaw.toString();
+
                if (s_controlaw==string("joint_pid_v1"))
                {
-                   if (!parseVelocityPidsGroup (velPidsGroup, _vpids))
+                   if (!parseVelocityPidsGroup (velPidsGroup, _vpids, JOINT_PID_V1))
+                   {
+                       yError() << "embObjMotionControl::fromConfig(): VELOCITY_CONTROL section: error detected in parameters syntax";
+                       return false;
+                   }
+                   else
+                   {
+                        yDebug("VELOCITY_CONTROL: using control law joint_pid_v1");
+                   }
+               }
+               else if (s_controlaw==string("motor_pid_v1"))
+               {
+                   if (!parseVelocityPidsGroup (velPidsGroup, _vpids, MOTOR_PID_V1))
                    {
                        yError() << "embObjMotionControl::fromConfig(): VELOCITY_CONTROL section: error detected in parameters syntax";
                        return false;

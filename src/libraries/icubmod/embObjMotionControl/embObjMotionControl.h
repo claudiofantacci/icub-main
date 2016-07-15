@@ -222,6 +222,7 @@ using namespace yarp::dev;
 
 enum { MAX_SHORT = 32767, MIN_SHORT = -32768, MAX_INT = 0x7fffffff, MIN_INT = 0x80000000,  MAX_U32 = 0xffffffff, MIN_U32 = 0x00, MAX_U16 = 0xffff, MIN_U16 = 0x0000};
 enum { CAN_SKIP_ADDR = 0x80 };
+enum { JOINT_PID_V1 = 1, MOTOR_PID_V1 = 2 };
 
 class yarp::dev::embObjMotionControl:   public DeviceDriver,
     public IPidControlRaw,
@@ -398,7 +399,7 @@ private:
     bool dealloc();
     bool isEpManagedByBoard();
     bool parsePositionPidsGroup(Bottle& pidsGroup, Pid myPid[]);
-    bool parseVelocityPidsGroup(Bottle& pidsGroup, Pid myPid[]);
+    bool parseVelocityPidsGroup(Bottle& pidsGroup, Pid myPid[], int control_law);
     bool parseTorquePidsGroup(Bottle& pidsGroup, Pid myPid[], double kbemf[], double ktau[], int filterType[]);
     bool parseImpedanceGroup_NewFormat(Bottle& pidsGroup, ImpedanceParameters vals[]);
     bool parseCurrentPidsGroup(Bottle& pidsGroup, Pid myPid[]);
