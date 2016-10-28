@@ -12,6 +12,8 @@
 
 using namespace yarp::os;
 
+#define FirmwareUpdaterCore_UPLOADCANBUSESINPARALLEL
+
 class FirmwareUpdaterCore : public QObject
 {
     Q_OBJECT

@@ -431,6 +431,160 @@ bool FirmwareUpdaterCore::uploadUpdater(QString filename,QString *resultString)
 }
 
 
+
+#if defined(FirmwareUpdaterCore_UPLOADCANBUSESINPARALLEL)
+
+bool FirmwareUpdaterCore::uploadCanApplication(QString filename,QString *resultString, QString ethAddress) {
+     if(!ethAddress.isEmpty()){
+         if(currentAddress != ethAddress){
+             if(downloader.connected){
+                 downloader.stopdriver();
+             }
+             getCanBoardsFromEth(ethAddress,resultString);
+         }
+
+     }
+     double timer_start =0;
+     double timer_end   =0;
+
+     if (downloader.connected == false){
+         *resultString ="Driver not running";
+         return false;
+     }
+
+     //check if at least one board was selected
+     bool at_least_one_board_selected = false;
+     int i = 0;
+
+     for (i=0; i<downloader.board_list_size; i++){
+         if (downloader.board_list[i].status==BOARD_RUNNING &&
+                 downloader.board_list[i].selected==true)
+             at_least_one_board_selected = true;
+     }
+
+     if (!at_least_one_board_selected){
+         *resultString = "No Boards selected! - Select one or more boards to update the firmware";
+         return false;
+     }
+     if (downloader.open_file(filename.toLatin1().data())!=0){
+         *resultString = "Error opening the selected file!";
+         return false;
+     }
+     //TODO
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+     //        if (strstr (buffer, "calibrationDataSN") != 0)
+     //        {
+     //            load_calibration (buffer);
+     //            return ALL_OK;
+     //        }
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+     // Get an identification of the firmware fot the file that you have selected
+     int firmware_board_type=0;
+     int firmware_version=0;
+     int firmware_revision=0;
+
+     //indentify download type from the type of the selected boards
+     int download_type = icubCanProto_boardType__unknown;
+     bool download_eeprom =false;
+     for (i=0; i<downloader.board_list_size; i++)
+     {
+         if (downloader.board_list[i].selected==true)
+         {
+             download_type = downloader.board_list[i].type;
+             download_eeprom = downloader.board_list[i].eeprom;
+         }
+
+     }
+
+     // Start the download for the selected boards
+     for (i=0; i<downloader.board_list_size; i++){
+         if (downloader.board_list[i].status==BOARD_RUNNING && downloader.board_list[i].selected==true){
+             if (downloader.startscheda(downloader.board_list[i].bus, downloader.board_list[i].pid, downloader.board_list[i].eeprom, downloader.board_list[i].type)!=0){
+                 *resultString = "Unable to start the board - Unable to send message 'start' or no answer received";
+                 return false;
+             } else {
+                 downloader.board_list[i].status=BOARD_WAITING;
+             }
+         }
+     }
+
+     int ret      = 0;
+     int finished = 0;
+
+     timer_start= yarp::os::Time::now();
+
+     bool print00 = false, print25 = false, print50 = false, print75 = false, print99 = false;
+     // Start the download for the selected boards
+     do
+     {
+         ret = downloader.download_file(CanPacket::everyCANbus, 0x0F, download_type,download_eeprom);
+         if (float(downloader.progress)/downloader.file_length >0.0  && print00==false)    {qDebug("downloading %s, 1%% done\n",filename.toLatin1().data()); print00=true;}
+         if (float(downloader.progress)/downloader.file_length >0.25 && print25==false)    {qDebug("downloading %s, 25%% done\n",filename.toLatin1().data()); print25=true;}
+         if (float(downloader.progress)/downloader.file_length >0.50 && print50==false)    {qDebug("downloading %s, 50%% done\n",filename.toLatin1().data()); print50=true;}
+         if (float(downloader.progress)/downloader.file_length >0.75 && print75==false)    {qDebug("downloading %s, 75%% done\n",filename.toLatin1().data()); print75=true;}
+         if (float(downloader.progress)/downloader.file_length >0.99 && print99==false)    {qDebug("downloading %s, finished!\n",filename.toLatin1().data()); print99=true;}
+
+         if (ret==1)
+         {
+            updateProgress(float(downloader.progress)/downloader.file_length);
+
+         }
+         if (ret==-1)
+         {
+             *resultString = "Fatal Error during download, terminate";
+             finished = 1;
+         }
+         if (ret==0)
+         {
+             *resultString = "Download terminated";
+             finished = 1;
+         }
+
+         //        // Update the progress bar
+         //        if (prompt_version==false && downloader.progress % 50 == 0)
+         //        {
+         //            gtk_progress_bar_set_fraction ((GtkProgressBar*) progress_bar, 0);
+         //            gtk_tree_view_set_model (GTK_TREE_VIEW (treeview), refresh_board_list_model());
+         //            gtk_widget_draw(treeview, NULL);
+         //            gtk_main_iteration_do (false);
+         //        }
+     }
+     while (finished!=1);
+     timer_end= yarp::os::Time::now();
+
+     // End the download for the selected boards
+     int errors =0;
+     downloader.stopscheda(CanPacket::everyCANbus, 15);
+
+
+
+     //Display result message
+     if (ret == 0)
+     {
+         char time_text [50];
+         double download_time = (timer_end-timer_start) ;
+         sprintf (time_text, "All Board OK! Download Time (s): %.2f", download_time);
+
+         *resultString = QString("Download Finished. %1").arg(time_text);
+
+         updateProgress(1.0);
+         return true;
+     }
+     else
+     {
+         //*resultString = "Error during file transfer";
+
+         updateProgress(1.0);
+         return false;
+     }
+
+     return true;
+}
+
+
+#else
+
 bool FirmwareUpdaterCore::uploadCanApplication(QString filename,QString *resultString, QString ethAddress)
 {
     if(!ethAddress.isEmpty()){
@@ -557,6 +711,8 @@ bool FirmwareUpdaterCore::uploadCanApplication(QString filename,QString *resultS
 
         timer_start= yarp::os::Time::now();
 
+        finished = 0;
+
         bool print00 = false, print25 = false, print50 = false, print75 = false, print99 = false;
         // Start the download for the selected boards
         do
@@ -628,7 +784,7 @@ bool FirmwareUpdaterCore::uploadCanApplication(QString filename,QString *resultS
 
     return true;
 }
-
+#endif
 bool FirmwareUpdaterCore::uploadEthApplication(QString filename,QString *resultString)
 {
     FILE *programFile=fopen(filename.toLatin1().data(),"r");
